@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "WSL": {
+      "commandName": "WSL2",
+      "distributionName": ""
+    },
+    "ExportScripts": {
+      "commandName": "Project",
+      "commandLineArgs": "export-scripts --connection-string DataSource=localhost;Database=D:\\Programowanie\\C#\\DbMetaTool\\data\\commerce.fdb;User=SYSDBA;Password=firebirdolaf; --output-dir C:\\Testing"
+    }
+  }
+}
