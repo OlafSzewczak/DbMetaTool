@@ -94,11 +94,23 @@ namespace DbMetaTool
         /// </summary>
         public static void ExportScripts(string connectionString, string outputDirectory)
         {
-            // TODO:
-            // 1) Połącz się z bazą danych przy użyciu connectionString.
-            // 2) Pobierz metadane domen, tabel (z kolumnami) i procedur.
-            // 3) Wygeneruj pliki .sql / .json / .txt w outputDirectory.
-            throw new NotImplementedException();
+            try
+            {
+                // 1) Połącz się z bazą danych przy użyciu connectionString
+                using var connection = new FbConnection(connectionString);
+
+                // 2) Pobierz metadane domen, tabel (z kolumnami) i procedur
+                var databaseMetadata = new MetadataExtractor(connection).ExtractMetadata();
+
+                // 3) Wygeneruj pliki .sql / .json / .txt w outputDirectory
+                if (databaseMetadata != null)
+                    ScriptsGenerator.GenerateSqlScripts(databaseMetadata, outputDirectory);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Failed to create Firebird database connection.");
+                Console.WriteLine(ex);
+            }
         }
 
         /// <summary>
