@@ -1,7 +1,5 @@
 ﻿using DbMetaTool.Services;
 using FirebirdSql.Data.FirebirdClient;
-using System;
-using System.IO;
 
 namespace DbMetaTool
 {
@@ -110,7 +108,7 @@ namespace DbMetaTool
 
                 // 3) Wygeneruj pliki .sql / .json / .txt w outputDirectory
                 if (databaseMetadata != null)
-                    ScriptsGenerator.GenerateSqlScripts(databaseMetadata, outputDirectory);
+                    new ScriptsGenerator(outputDirectory, databaseMetadata).GenerateSqlScripts();
             }
             catch (Exception ex)
             {
