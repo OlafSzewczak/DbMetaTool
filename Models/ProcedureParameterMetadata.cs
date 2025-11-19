@@ -1,6 +1,6 @@
 ﻿namespace DbMetaTool.Models
 {
-    public class ProcedureParameter
+    public class ProcedureParameterMetadata
     {
         public string Name { get; set; }
         public string DataType { get; set; }
