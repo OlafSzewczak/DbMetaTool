@@ -1,4 +1,6 @@
-﻿using System;
+﻿using DbMetaTool.Services;
+using FirebirdSql.Data.FirebirdClient;
+using System;
 using System.IO;
 
 namespace DbMetaTool
@@ -83,6 +85,8 @@ namespace DbMetaTool
         {
             // TODO:
             // 1) Utwórz pustą bazę danych FB 5.0 w katalogu databaseDirectory.
+            FbDatabaseCreator.Create(databaseDirectory, "firebird_db");
+
             // 2) Wczytaj i wykonaj kolejno skrypty z katalogu scriptsDirectory
             //    (tylko domeny, tabele, procedury).
             // 3) Obsłuż błędy i wyświetl raport.
