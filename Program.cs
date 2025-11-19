@@ -85,12 +85,14 @@ namespace DbMetaTool
         {
             // TODO:
             // 1) Utwórz pustą bazę danych FB 5.0 w katalogu databaseDirectory.
-            FbDatabaseCreator.Create(databaseDirectory, "firebird_db");
+            var connectionString = FbDatabaseCreator.CreateEmpty(databaseDirectory, "firebird_db");
 
             // 2) Wczytaj i wykonaj kolejno skrypty z katalogu scriptsDirectory
             //    (tylko domeny, tabele, procedury).
+             if (connectionString != null)
+                ScriptsExecutor.Execute(connectionString, scriptsDirectory);
+
             // 3) Obsłuż błędy i wyświetl raport.
-            throw new NotImplementedException();
         }
 
         /// <summary>
