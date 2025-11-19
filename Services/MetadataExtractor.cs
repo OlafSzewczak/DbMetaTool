@@ -16,7 +16,8 @@ namespace DbMetaTool.Services
                 {
                     DomainsMetadata = ExtractDomainsMetadata(),
                     TablesMetadata = ExtractTablesMetadata(),
-                };
+                    ProceduresMetadata = ExtractProceduresMetadata()
+            };
             }
             catch (Exception ex)
             {
@@ -148,9 +149,103 @@ namespace DbMetaTool.Services
 
             return tables;
         }
-        private bool IsFieldSourceBaseType(string? fieldSource)
+
+        private static bool IsFieldSourceBaseType(string? fieldSource)
         {
             return fieldSource.StartsWith("RDB$");
+        }
+
+        private List<ProcedureMetadata> ExtractProceduresMetadata()
+        {
+            var procedures = new List<ProcedureMetadata>();
+
+            var query = @"
+                SELECT 
+                    RDB$PROCEDURE_NAME,
+                    RDB$PROCEDURE_SOURCE
+                FROM RDB$PROCEDURES
+                WHERE RDB$SYSTEM_FLAG = 0
+                ORDER BY RDB$PROCEDURE_NAME";
+
+            using var cmd = new FbCommand(query, connection);
+            using var reader = cmd.ExecuteReader();
+
+            while (reader.Read())
+            {
+                var procedure = new ProcedureMetadata
+                {
+                    Name = reader["RDB$PROCEDURE_NAME"].ToString().Trim(),
+                    Source = reader["RDB$PROCEDURE_SOURCE"] != DBNull.Value
+                        ? reader["RDB$PROCEDURE_SOURCE"].ToString()
+                        : ""
+                };
+
+                // Pobierz parametry procedury
+                procedure.Parameters = ExtractProcedureParameters(procedure.Name);
+
+                procedures.Add(procedure);
+            }
+
+            Console.WriteLine($"  - Pobrano {procedures.Count} procedur");
+            return procedures;
+        }
+
+        private List<ProcedureParameterMetadata> ExtractProcedureParameters(string procedureName)
+        {
+            var parameters = new List<ProcedureParameterMetadata>();
+
+            var query = @"
+                    SELECT 
+                        pp.RDB$PARAMETER_NAME as PARAM_NAME,
+                        pp.RDB$PARAMETER_TYPE as PARAM_TYPE,
+                        pp.RDB$PARAMETER_NUMBER as PARAM_NUMBER,
+                        f.RDB$FIELD_TYPE as FIELD_TYPE,
+                        f.RDB$FIELD_LENGTH as FIELD_LENGTH,
+                        f.RDB$FIELD_PRECISION as FIELD_PRECISION,
+                        f.RDB$FIELD_SCALE as FIELD_SCALE,
+                        pp.RDB$FIELD_SOURCE as FIELD_SOURCE
+                    FROM RDB$PROCEDURE_PARAMETERS pp
+                    JOIN RDB$FIELDS f ON pp.RDB$FIELD_SOURCE = f.RDB$FIELD_NAME
+                    WHERE pp.RDB$PROCEDURE_NAME = @ProcedureName
+                    ORDER BY pp.RDB$PARAMETER_TYPE, pp.RDB$PARAMETER_NUMBER";
+
+            using var cmd = new FbCommand(query, connection);
+            cmd.Parameters.AddWithValue("@ProcedureName", procedureName);
+            using var reader = cmd.ExecuteReader();
+
+            while (reader.Read())
+            {
+                var fieldSource = reader["FIELD_SOURCE"].ToString().Trim();
+                string dataType;
+
+                // Sprawdź czy parametr używa domeny czy typu podstawowego
+                if (fieldSource.StartsWith("RDB$"))
+                {
+                    var fieldType = Convert.ToInt32(reader["FIELD_TYPE"]);
+                    var fieldLength = reader["FIELD_LENGTH"] != DBNull.Value ? Convert.ToInt32(reader["FIELD_LENGTH"]) : 0;
+                    var fieldPrecision = reader["FIELD_PRECISION"] != DBNull.Value ? Convert.ToInt32(reader["FIELD_PRECISION"]) : 0;
+                    var fieldScale = reader["FIELD_SCALE"] != DBNull.Value ? Convert.ToInt32(reader["FIELD_SCALE"]) : 0;
+
+                    dataType = GetDataTypeString(fieldType, fieldLength, fieldPrecision, fieldScale);
+                }
+                else
+                {
+                    // Używa domeny
+                    dataType = fieldSource;
+                }
+
+                var parameter = new ProcedureParameterMetadata
+                {
+                    Name = reader["PARAM_NAME"].ToString().Trim(),
+                    DataType = dataType,
+                    ParameterType = Convert.ToInt32(reader["PARAM_TYPE"]),
+                    Position = Convert.ToInt32(reader["PARAM_NUMBER"])
+                };
+
+                parameters.Add(parameter);
+            }
+
+            return parameters;
         }
 
         private List<string> GetTableNames()
@@ -174,6 +269,7 @@ namespace DbMetaTool.Services
 
             return tableNames;
         }
+
         private static string GetDataTypeString(int fieldType, int fieldLength, int precision, int scale)
         {
             return fieldType switch
