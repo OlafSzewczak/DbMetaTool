@@ -8,42 +8,12 @@ namespace DbMetaTool.Services
         public static void GenerateSqlScripts(DatabaseMetadata metadata, string outputDirectory)
         {
             // Generuj domeny
-            if (metadata.Domains.Count > 0)
+            if (metadata.DomainsMetadata.Count > 0)
                 GenerateDomainScripts(metadata, outputDirectory);
 
             // Generuj tabele
-            //if (metadata.Tables.Count > 0)
-            //{
-            //    var sb = new StringBuilder();
-            //    sb.AppendLine("-- Tabele");
-            //    sb.AppendLine();
-
-            //    foreach (var table in metadata.Tables)
-            //    {
-            //        sb.AppendLine($"CREATE TABLE {table.Name} (");
-
-            //        var fieldLines = new List<string>();
-            //        foreach (var field in table.Fields)
-            //        {
-            //            var line = $"  {field.Name} {field.DataType}";
-
-            //            if (!string.IsNullOrEmpty(field.DefaultValue))
-            //                line += $" {field.DefaultValue}";
-
-            //            if (field.NotNull)
-            //                line += " NOT NULL";
-
-            //            fieldLines.Add(line);
-            //        }
-
-            //        sb.AppendLine(string.Join(",\n", fieldLines));
-            //        sb.AppendLine(");");
-            //        sb.AppendLine();
-            //    }
-
-            //    File.WriteAllText(Path.Combine(outputDirectory, "02_tables.sql"), sb.ToString(), Encoding.UTF8);
-            //    Console.WriteLine($"  ✓ 02_tables.sql ({metadata.Tables.Count} tabel)");
-            //}
+            if (metadata.TablesMetadata.Count > 0)
+                GenerateTableScripts(outputDirectory, metadata.TablesMetadata);
 
             //// Generuj procedury
             //if (metadata.Procedures.Count > 0)
@@ -68,7 +38,7 @@ namespace DbMetaTool.Services
         private static void GenerateDomainScripts(DatabaseMetadata metadata, string outputDirectory)
         {
             var sb = new StringBuilder();
-            foreach (var domain in metadata.Domains)
+            foreach (var domain in metadata.DomainsMetadata)
             {
                 sb.AppendLine($"CREATE DOMAIN {domain.Name} AS {domain.DataType}");
 
@@ -85,6 +55,36 @@ namespace DbMetaTool.Services
 
                 //TODO error handling
                 File.WriteAllText(Path.Combine(outputDirectory, $"create_{domain.Name}_domain.sql"), sb.ToString(), Encoding.UTF8);
+                sb.Clear();
+            }
+        }
+
+        private static void GenerateTableScripts(string outputDirectory, List<TableMetadata> tablesMetadata)
+        {
+            var sb = new StringBuilder();
+            foreach (var tableMetadata in tablesMetadata)
+            {
+                sb.AppendLine($"CREATE TABLE {tableMetadata.Name} (");
+
+                var fieldLines = new List<string>();
+                foreach (var fieldMetadata in tableMetadata.FieldsMetadata)
+                {
+                    var line = $"  {fieldMetadata.Name} {fieldMetadata.DataType}";
+
+                    if (!string.IsNullOrEmpty(fieldMetadata.DefaultValue))
+                        line += $" {fieldMetadata.DefaultValue}";
+
+                    if (fieldMetadata.NotNull)
+                        line += " NOT NULL";
+
+                    fieldLines.Add(line);
+                }
+
+                sb.AppendLine(string.Join(",\n", fieldLines));
+                sb.AppendLine(");");
+
+                File.WriteAllText(Path.Combine(outputDirectory, $"create_{tableMetadata.Name}_table.sql"), sb.ToString(), Encoding.UTF8);
+
                 sb.Clear();
             }
         }
