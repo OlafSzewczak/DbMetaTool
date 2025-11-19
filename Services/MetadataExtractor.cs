@@ -14,7 +14,8 @@ namespace DbMetaTool.Services
                 _connection.Open();
                 return new DatabaseMetadata
                 {
-                    Domains = ExtractDomains(_connection)
+                    DomainsMetadata = ExtractDomainsMetadata(),
+                    TablesMetadata = ExtractTablesMetadata(),
                 };
             }
             catch (Exception ex)
@@ -25,9 +26,9 @@ namespace DbMetaTool.Services
             }
         }
 
-        private static List<Domain> ExtractDomains(FbConnection connection)
+        private List<DomainMetadata> ExtractDomainsMetadata()
         {
-            var domains = new List<Domain>();
+            var domains = new List<DomainMetadata>();
 
             var query = @"
                 SELECT 
@@ -44,7 +45,7 @@ namespace DbMetaTool.Services
                 AND f.RDB$SYSTEM_FLAG = 0
                 ORDER BY f.RDB$FIELD_NAME";
 
-            using var cmd = new FbCommand(query, connection);
+            using var cmd = new FbCommand(query, _connection);
             using var reader = cmd.ExecuteReader();
 
             try
@@ -56,7 +57,7 @@ namespace DbMetaTool.Services
                     var fieldPrecision = reader["FIELD_PRECISION"] != DBNull.Value ? Convert.ToInt32(reader["FIELD_PRECISION"]) : 0;
                     var fieldScale = reader["FIELD_SCALE"] != DBNull.Value ? Convert.ToInt32(reader["FIELD_SCALE"]) : 0;
 
-                    var domain = new Domain
+                    var domain = new DomainMetadata
                     {
                         Name = reader["DOMAIN_NAME"].ToString().Trim(),
                         DataType = GetDataTypeString(fieldType, fieldLength, fieldPrecision, fieldScale),
@@ -77,6 +78,102 @@ namespace DbMetaTool.Services
             return domains;
         }
 
+        private List<TableMetadata> ExtractTablesMetadata()
+        {
+            var tables = new List<TableMetadata>();
+
+            var tableNames = GetTableNames();
+            if (tableNames.Count == 0)
+            {
+                Console.WriteLine("Nie znaleziono tabel w bazie danych");
+                return [];
+            }
+
+            foreach (var tableName in tableNames)
+            {
+                var table = new TableMetadata { Name = tableName };
+
+                var fieldQuery = @"
+                            SELECT 
+                                rf.RDB$FIELD_NAME as FIELD_NAME,
+                                rf.RDB$FIELD_SOURCE as FIELD_SOURCE,
+                                rf.RDB$NULL_FLAG as NULL_FLAG,
+                                rf.RDB$DEFAULT_SOURCE as DEFAULT_SOURCE,
+                                f.RDB$FIELD_TYPE as FIELD_TYPE,
+                                f.RDB$FIELD_LENGTH as FIELD_LENGTH,
+                                f.RDB$FIELD_PRECISION as FIELD_PRECISION,
+                                f.RDB$FIELD_SCALE as FIELD_SCALE,
+                                rf.RDB$FIELD_POSITION as FIELD_POSITION
+                            FROM RDB$RELATION_FIELDS rf
+                            JOIN RDB$FIELDS f ON rf.RDB$FIELD_SOURCE = f.RDB$FIELD_NAME
+                            WHERE rf.RDB$RELATION_NAME = @TableName
+                            ORDER BY rf.RDB$FIELD_POSITION";
+
+                using var fieldCmd = new FbCommand(fieldQuery, connection);
+                fieldCmd.Parameters.AddWithValue("@TableName", tableName);
+                using var fieldReader = fieldCmd.ExecuteReader();
+
+                while (fieldReader.Read())
+                {
+                    var fieldSource = fieldReader["FIELD_SOURCE"].ToString().Trim();
+
+                    var field = new TableField
+                    {
+                        Name = fieldReader["FIELD_NAME"].ToString().Trim(),
+                        NotNull = fieldReader["NULL_FLAG"] != DBNull.Value && Convert.ToInt32(fieldReader["NULL_FLAG"]) == 1,
+                        DefaultValue = fieldReader["DEFAULT_SOURCE"] != DBNull.Value ? fieldReader["DEFAULT_SOURCE"].ToString().Trim() : null,
+                        Position = Convert.ToInt32(fieldReader["FIELD_POSITION"])
+                    };
+
+                    // Sprawdź czy pole używa domeny czy typu podstawowego
+                    if (IsFieldSourceBaseType(fieldSource))
+                    {
+                        var fieldType = Convert.ToInt32(fieldReader["FIELD_TYPE"]);
+                        var fieldLength = fieldReader["FIELD_LENGTH"] != DBNull.Value ? Convert.ToInt32(fieldReader["FIELD_LENGTH"]) : 0;
+                        var fieldPrecision = fieldReader["FIELD_PRECISION"] != DBNull.Value ? Convert.ToInt32(fieldReader["FIELD_PRECISION"]) : 0;
+                        var fieldScale = fieldReader["FIELD_SCALE"] != DBNull.Value ? Convert.ToInt32(fieldReader["FIELD_SCALE"]) : 0;
+
+                        field.DataType = GetDataTypeString(fieldType, fieldLength, fieldPrecision, fieldScale);
+                    }
+                    else
+                    {
+                        field.DataType = fieldSource;
+                    }
+
+                    table.FieldsMetadata.Add(field);
+                }
+
+                tables.Add(table);
+            }
+
+            return tables;
+        }
+        private bool IsFieldSourceBaseType(string? fieldSource)
+        {
+            return fieldSource.StartsWith("RDB$");
+        }
+
+        private List<string> GetTableNames()
+        {
+            var tableQuery = @"
+                SELECT RDB$RELATION_NAME
+                FROM RDB$RELATIONS
+                WHERE RDB$SYSTEM_FLAG = 0 
+                AND RDB$VIEW_BLR IS NULL
+                ORDER BY RDB$RELATION_NAME";
+
+            using var tableCmd = new FbCommand(tableQuery, _connection);
+            using var tableReader = tableCmd.ExecuteReader();
+
+            var tableNames = new List<string>();
+            while (tableReader.Read())
+            {
+                tableNames.Add(tableReader["RDB$RELATION_NAME"].ToString().Trim());
+            }
+            tableReader.Close();
+
+            return tableNames;
+        }
         private static string GetDataTypeString(int fieldType, int fieldLength, int precision, int scale)
         {
             return fieldType switch
