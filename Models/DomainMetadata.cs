@@ -1,6 +1,6 @@
 ﻿namespace DbMetaTool.Models
 {
-    public class Domain
+    public class DomainMetadata
     {
         public string Name { get; set; }
         public string DataType { get; set; }
